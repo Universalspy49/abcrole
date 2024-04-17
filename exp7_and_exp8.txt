@@ -1,0 +1,293 @@
+
+=============================================================================================================================
+Experiment 7:
+Ans1:
+=============================================================================================================================
+#include <stdio.h>
+#include <stdlib.h>
+#include <pthread.h>
+
+#define BUFFER_SIZE 5
+
+int buffer[BUFFER_SIZE];
+int count = 0; // Number of items in the buffer
+int in = 0;    // Index for inserting into the buffer
+int out = 0;   // Index for removing from the buffer
+
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t empty = PTHREAD_COND_INITIALIZER;
+pthread_cond_t full = PTHREAD_COND_INITIALIZER;
+
+void *producer(void *arg) {
+    int item;
+
+    for (int i = 0; i < 10; i++) {
+        item = rand() % 100; // Generate a random item
+
+        pthread_mutex_lock(&mutex);
+        while (count == BUFFER_SIZE) {
+            pthread_cond_wait(&empty, &mutex);
+        }
+
+        buffer[in] = item;
+        in = (in + 1) % BUFFER_SIZE;
+        count++;
+
+        printf("Produced item %d\n", item);
+
+        pthread_cond_signal(&full);
+        pthread_mutex_unlock(&mutex);
+    }
+
+    pthread_exit(NULL);
+}
+
+void *consumer(void *arg) {
+    int item;
+
+    for (int i = 0; i < 10; i++) {
+        pthread_mutex_lock(&mutex);
+        while (count == 0) {
+            pthread_cond_wait(&full, &mutex);
+        }
+
+        item = buffer[out];
+        out = (out + 1) % BUFFER_SIZE;
+        count--;
+
+        printf("Consumed item %d\n", item);
+
+        pthread_cond_signal(&empty);
+        pthread_mutex_unlock(&mutex);
+    }
+
+    pthread_exit(NULL);
+}
+
+int main() {
+    pthread_t producer_thread, consumer_thread;
+
+    // Create producer and consumer threads
+    pthread_create(&producer_thread, NULL, producer, NULL);
+    pthread_create(&consumer_thread, NULL, consumer, NULL);
+
+    // Join threads
+    pthread_join(producer_thread, NULL);
+    pthread_join(consumer_thread, NULL);
+
+    return 0;
+}
+
+
+Ans2:
+=============================================================================================================================
+#include <stdio.h>
+#include <stdlib.h>
+#include <pthread.h>
+#include <semaphore.h>
+
+#define NUM_READERS 3
+#define NUM_WRITERS 1
+
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+sem_t reader_sem, writer_sem;
+
+int readers_count = 0;
+int shared_variable = 0;
+
+void *reader(void *arg) {
+    while (1) {
+        pthread_mutex_lock(&mutex);
+        readers_count++;
+        if (readers_count == 1) {
+            sem_wait(&writer_sem); // Wait if a writer is writing
+        }
+        pthread_mutex_unlock(&mutex);
+
+        // Reading operation
+        printf("Reader %d reads: %d\n", *((int *)arg), shared_variable);
+
+        pthread_mutex_lock(&mutex);
+        readers_count--;
+        if (readers_count == 0) {
+            sem_post(&writer_sem); // Signal writer to write
+        }
+        pthread_mutex_unlock(&mutex);
+
+        // Sleep to simulate reading time
+        sleep(rand() % 3);
+    }
+    pthread_exit(NULL);
+}
+
+void *writer(void *arg) {
+    while (1) {
+        sem_wait(&reader_sem); // Wait if any readers are active
+        sem_wait(&writer_sem); // Wait if another writer is writing
+
+        // Writing operation
+        shared_variable++;
+        printf("Writer writes: %d\n", shared_variable);
+
+        sem_post(&writer_sem); // Signal writer semaphore
+        sem_post(&reader_sem); // Signal reader semaphore
+
+        // Sleep to simulate writing time
+        sleep(rand() % 3);
+    }
+    pthread_exit(NULL);
+}
+
+int main() {
+    pthread_t readers[NUM_READERS], writers[NUM_WRITERS];
+    int reader_ids[NUM_READERS], writer_ids[NUM_WRITERS];
+
+    // Initialize semaphores
+    sem_init(&reader_sem, 0, NUM_READERS);
+    sem_init(&writer_sem, 0, 1);
+
+    // Create reader threads
+    for (int i = 0; i < NUM_READERS; i++) {
+        reader_ids[i] = i + 1;
+        pthread_create(&readers[i], NULL, reader, &reader_ids[i]);
+    }
+
+    // Create writer threads
+    for (int i = 0; i < NUM_WRITERS; i++) {
+        writer_ids[i] = i + 1;
+        pthread_create(&writers[i], NULL, writer, &writer_ids[i]);
+    }
+
+    // Join reader threads
+    for (int i = 0; i < NUM_READERS; i++) {
+        pthread_join(readers[i], NULL);
+    }
+
+    // Join writer threads
+    for (int i = 0; i < NUM_WRITERS; i++) {
+        pthread_join(writers[i], NULL);
+    }
+
+    // Destroy semaphores
+    sem_destroy(&reader_sem);
+    sem_destroy(&writer_sem);
+
+    return 0;
+}
+
+=============================================================================================================================
+Experiment 8:
+Ans1:
+=============================================================================================================================
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <string.h>
+
+#define BUF_SIZE 1024
+
+int main() {
+    int sfd, rfd;
+    char *s_fifo = "/tmp/sender", *r_fifo = "/tmp/receiver", buf[BUF_SIZE];
+
+    mkfifo(s_fifo, 0666); mkfifo(r_fifo, 0666);
+    sfd = open(s_fifo, O_WRONLY); rfd = open(r_fifo, O_RDONLY);
+
+    printf("Sender program\nEnter message to send: ");
+    fgets(buf, BUF_SIZE, stdin); write(sfd, buf, strlen(buf) + 1);
+
+    printf("Receiver program\n");
+    read(rfd, buf, BUF_SIZE); printf("Received: %s", buf);
+
+    close(sfd); close(rfd); unlink(s_fifo); unlink(r_fifo);
+    return 0;
+}
+
+Ans2:
+=============================================================================================================================
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <string.h>
+
+#define SHM_SIZE 1024
+
+struct shared_data { int written; char message[SHM_SIZE]; };
+
+int main() {
+    int shmid;
+    key_t key = 1234;
+    struct shared_data *shared_memory;
+
+    shmid = shmget(key, sizeof(struct shared_data), IPC_CREAT | 0666);
+    if (shmid == -1) { perror("shmget"); exit(EXIT_FAILURE); }
+
+    shared_memory = shmat(shmid, NULL, 0);
+    if (shared_memory == (void *)-1) { perror("shmat"); exit(EXIT_FAILURE); }
+
+    printf("Producer process\nEnter message to write into shared memory: ");
+    fgets(shared_memory->message, SHM_SIZE, stdin);
+    shared_memory->written = 1;
+
+    shmdt(shared_memory);
+
+    printf("\nConsumer process\n");
+    while (!shared_memory->written) { sleep(1); }
+    printf("Received message from shared memory: %s", shared_memory->message);
+
+    shmctl(shmid, IPC_RMID, NULL);
+
+    return 0;
+}
+
+
+Ans3:
+=============================================================================================================================
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
+#include <signal.h>
+
+#define MSG_SIZE 128
+
+struct message { long mtype; char mtext[MSG_SIZE]; };
+
+void sender_handler(int sig) { printf("Sender received signal %d\n", sig); }
+void receiver_handler(int sig) { printf("Receiver received signal %d\n", sig); }
+
+int main() {
+    pid_t pid;
+    key_t key = ftok("/tmp", 'A');
+    int msqid;
+    struct message msg;
+
+    msqid = msgget(key, IPC_CREAT | 0666);
+    if (msqid == -1) { perror("msgget"); exit(EXIT_FAILURE); }
+
+    pid = fork();
+    if (pid < 0) { perror("fork"); exit(EXIT_FAILURE); }
+    else if (pid == 0) { signal(SIGUSR1, SIG_IGN); 
+	signal(SIGUSR2, sender_handler); sleep(1); 
+	msg.mtype = 1; sprintf(msg.mtext, "Hello from sender!"); 
+	if (msgsnd(msqid, &msg, sizeof(msg.mtext), 0) == -1) { perror("msgsnd"); 
+	exit(EXIT_FAILURE); } }
+    else { 
+	signal(SIGUSR1, receiver_handler); 
+	signal(SIGUSR2, SIG_IGN); 
+	printf("Receiver waiting for message...\n"); 
+	if (msgrcv(msqid, &msg, sizeof(msg.mtext), 1, 0) == -1) { 
+	perror("msgrcv"); exit(EXIT_FAILURE); } 
+	printf("Received message from sender: %s\n", msg.mtext); 
+	if (msgctl(msqid, IPC_RMID, NULL) == -1) { perror("msgctl"); 
+	exit(EXIT_FAILURE); } }
+
+    return 0;
+}

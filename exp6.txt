@@ -1,0 +1,227 @@
+Ans1:
+=============================================================================================================================
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+void *concatenate_strings(void *argv) {
+    char **strings = (char **)argv;
+    char *result;
+    int total_length = 0;
+
+    for (int i = 0; strings[i] != NULL; i++) {
+        total_length += strlen(strings[i]);
+    }
+
+    result = malloc(total_length + 1);
+
+    strcpy(result, strings[0]);
+    for (int i = 1; strings[i] != NULL; i++) {
+        strcat(result, strings[i]);
+    }
+
+    return result;
+}
+
+int main() {
+    char *strings[] = {"Hello", " ", "world", "!", NULL};
+    pthread_t thread;
+    char *result;
+
+    pthread_create(&thread, NULL, concatenate_strings, strings);
+    pthread_join(thread, (void **)&result);
+
+    printf("Concatenated string: %s\n", result);
+
+    free(result);
+    return 0;
+}
+
+Ans2:
+=============================================================================================================================
+#include <stdio.h>
+#include <pthread.h>
+#include <string.h>
+
+#define MAX_STRINGS 5
+#define MAX_LENGTH 100
+
+void *string_length(void *arg);
+
+int main() {
+pthread_t tid[MAX_STRINGS];
+char strings[MAX_STRINGS][MAX_LENGTH] = {"Hello", "This is a test", "Strings", "With Different Lengths", "Goodbye"};
+for (int i = 0; i < MAX_STRINGS; i++) pthread_create(&tid[i], NULL, string_length, strings[i]);
+for (int i = 0; i < MAX_STRINGS; i++) pthread_join(tid[i], NULL);
+return 0;
+}
+
+void *string_length(void *arg) {
+printf("String: %s, Length: %lu\n", (char *)arg, strlen((char *)arg));
+pthread_exit(NULL);
+}
+
+Ans3:
+=============================================================================================================================
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <limits.h>
+
+#define ARRAY_SIZE 10
+
+int numbers[ARRAY_SIZE] = {4, 8, 15, 16, 23, 42, 6, 55, 20, 11};
+int average, maximum, minimum;
+
+void *calculate_average(void *arg) {
+    int sum = 0;
+    for (int i = 0; i < ARRAY_SIZE; i++) sum += numbers[i];
+    average = sum / ARRAY_SIZE;
+    pthread_exit(NULL);
+}
+
+void *calculate_maximum(void *arg) {
+    maximum = INT_MIN;
+    for (int i = 0; i < ARRAY_SIZE; i++) if (numbers[i] > maximum) maximum = numbers[i];
+    pthread_exit(NULL);
+}
+
+void *calculate_minimum(void *arg) {
+    minimum = INT_MAX;
+    for (int i = 0; i < ARRAY_SIZE; i++) if (numbers[i] < minimum) minimum = numbers[i];
+    pthread_exit(NULL);
+}
+
+int main() {
+    pthread_t threads[3];
+    pthread_create(&threads[0], NULL, calculate_average, NULL);
+    pthread_create(&threads[1], NULL, calculate_maximum, NULL);
+    pthread_create(&threads[2], NULL, calculate_minimum, NULL);
+    for (int i = 0; i < 3; i++) pthread_join(threads[i], NULL);
+    printf("Average: %d\n", average);
+    printf("Maximum: %d\n", maximum);
+    printf("Minimum: %d\n", minimum);
+    return 0;
+}
+
+
+Ans4:
+=============================================================================================================================
+#include <pthread.h>
+#include <stdio.h>
+
+#define ARRAY_SIZE 10
+
+int numbers[ARRAY_SIZE] = {9, 4, 6, 2, 7, 1, 8, 3, 5, 10};
+int sorted_numbers[ARRAY_SIZE];
+
+typedef struct {
+    int *arr;
+    int size;
+} ThreadData;
+
+void merge(int arr[], int l, int m, int r) {
+    int n1 = m - l + 1, n2 = r - m, L[n1], R[n2], i = 0, j = 0, k = l;
+    for (; i < n1; i++) L[i] = arr[l + i];
+    for (; j < n2; j++) R[j] = arr[m + 1 + j];
+    for (i = 0, j = 0; i < n1 && j < n2; k++)
+        arr[k] = (L[i] <= R[j]) ? L[i++] : R[j++];
+    while (i < n1) arr[k++] = L[i++];
+    while (j < n2) arr[k++] = R[j++];
+}
+
+void merge_sort(int arr[], int l, int r) {
+    if (l < r) {
+        int m = l + (r - l) / 2;
+        merge_sort(arr, l, m);
+        merge_sort(arr, m + 1, r);
+        merge(arr, l, m, r);
+    }
+}
+
+void *sort_half(void *arg) {
+    ThreadData *data = (ThreadData *)arg;
+    merge_sort(data->arr, 0, data->size - 1);
+    pthread_exit(NULL);
+}
+
+void merge_sorted_arrays(int arr1[], int arr2[], int size1, int size2) {
+    int i = 0, j = 0, k = 0;
+    while (i < size1 && j < size2)
+        sorted_numbers[k++] = (arr1[i] <= arr2[j]) ? arr1[i++] : arr2[j++];
+    while (i < size1) sorted_numbers[k++] = arr1[i++];
+    while (j < size2) sorted_numbers[k++] = arr2[j++];
+}
+
+int main() {
+    pthread_t threads[2];
+    ThreadData thread_data[2] = {{numbers, ARRAY_SIZE / 2}, {numbers + ARRAY_SIZE / 2, ARRAY_SIZE / 2}};
+    for (int i = 0; i < 2; i++) pthread_create(&threads[i], NULL, sort_half, &thread_data[i]);
+    for (int i = 0; i < 2; i++) pthread_join(threads[i], NULL);
+    merge_sorted_arrays(thread_data[0].arr, thread_data[1].arr, thread_data[0].size, thread_data[1].size);
+    printf("Sorted Array: ");
+    for (int i = 0; i < ARRAY_SIZE; i++) printf("%d ", sorted_numbers[i]);
+    printf("\n");
+    return 0;
+}
+
+
+
+
+Ans5:
+=============================================================================================================================
+#include <pthread.h>
+#include <stdio.h>
+
+#define NUM_THREADS 5
+
+void *thread_function(void *thread_id) {
+    printf("Thread %ld: Hello! I am thread number %ld.\n", (long)thread_id, (long)thread_id);
+    pthread_exit(NULL);
+}
+
+int main() {
+    pthread_t threads[NUM_THREADS];
+    for (long i = 0; i < NUM_THREADS; i++) {
+        pthread_create(&threads[i], NULL, thread_function, (void *)i);
+        printf("Main: Created thread %ld\n", i);
+    }
+    for (long i = 0; i < NUM_THREADS; i++) pthread_join(threads[i], NULL);
+    printf("Main: All threads have completed execution.\n");
+    return 0;
+}
+
+
+
+Ans6:
+=============================================================================================================================
+#include <pthread.h>
+#include <stdio.h>
+#include <unistd.h>
+
+void *cleanup_thread(void *arg) {
+    printf("Cleanup Thread: Started execution.\n");
+    sleep(2);
+    printf("Cleanup Thread: Finished execution.\n");
+    pthread_exit(NULL);
+}
+
+void *abrupt_thread(void *arg) {
+    printf("Abrupt Thread: Started execution.\n");
+    sleep(2);
+    printf("Abrupt Thread: Execution interrupted abruptly.\n");
+    pthread_exit(NULL);
+}
+
+int main() {
+    pthread_t cleanup, abrupt;
+    pthread_create(&cleanup, NULL, cleanup_thread, NULL);
+    sleep(1);
+    pthread_create(&abrupt, NULL, abrupt_thread, NULL);
+    pthread_join(cleanup, NULL);
+    pthread_cancel(abrupt);
+    pthread_join(abrupt, NULL);
+    printf("Main: All threads have completed execution.\n");
+    return 0;
+}
